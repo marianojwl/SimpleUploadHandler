@@ -2,81 +2,68 @@
 namespace marianojwl\SimpleUploadHandler {
     class SimpleUploadHandler {
         protected $multiple;
+        protected $allowed;
+        protected $maxFileSize;
 
-        public function __construct(bool $multiple = false) {
+        public function __construct(bool $multiple = false, $allowed = ["png"],int $maxFileSize = 5000000) {
             $this->multiple = $multiple;
+            $this->allowed = $allowed;
+            $this->maxFileSize = $maxFileSize;
+        }
+        public function getAcceptAttributeValue() {
+          return "." . implode(", .",$this->allowed);
         }
         public function getForm(string $action, string $fileInputName = "myFile", string $fileInputId = "myFile", array $otherFields = []) {
             $html = '<form action="'.$action.'" method="post" enctype="multipart/form-data">' . PHP_EOL;
             foreach($otherFields as $of)
               $html .= $of.PHP_EOL;
-            $html .= '<input type="file" name="'.$fileInputName.($this->multiple?'[]':'').'" id="'.$fileInputId.'"'.($this->multiple?' multiple':'').'>'. PHP_EOL;
+            $html .= '<input accept="'.$this->getAcceptAttributeValue().'" type="file" name="'.$fileInputName.($this->multiple?'[]':'').'" id="'.$fileInputId.'"'.($this->multiple?' multiple':'').'>'. PHP_EOL;
             $html .= '<input type="submit" value="Upload" name="submit">'. PHP_EOL;
             $html .= '</form>' . PHP_EOL;
             return $html;
           }
           
-          public function handleUpload(string $inputFileName, array $permited = [], string $target_dir = "./") {
-            $this->abortIfFileToBig();
-            // Check if image file is a actual image or fake image
-            $fileNamesResult = [];
-            if(isset($_POST["submit"])) {
-                if ( !is_array( $_FILES[$inputFileName]['name'] ) ) {
-                  $_FILES[$inputFileName]['name'] = [ $_FILES[$inputFileName]['name'] ];
-                  $_FILES[$inputFileName]["tmp_name"] = [ $_FILES[$inputFileName]["tmp_name"] ];
-                  $_FILES[$inputFileName]["size"] = [ $_FILES[$inputFileName]["size"] ];
-                }
-                $countfiles = count($_FILES[$inputFileName]['name']);
-                for($i=0;$i<$countfiles;$i++)
-                {
-                  $uploadOk = 1;
-                  $target_file = $target_dir . basename($_FILES[$inputFileName]["name"][$i]);
-                  $imageFileType = strtolower(pathinfo($target_file,PATHINFO_EXTENSION));
-                  $check = getimagesize($_FILES[$inputFileName]["tmp_name"][$i]);
-                  if($check !== false) {
-                    echo "File ".$_FILES[$inputFileName]["name"][$i]." is an image - " . $check["mime"] . ".";
-                    $uploadOk = 1;
-                  } else {
-                    echo "File ".$_FILES[$inputFileName]["name"][$i]." is not an image.";
-                    $uploadOk = 0;
-                  }
-                  // Check if file already exists
-                  if (file_exists($target_file)) {
-                    echo "Sorry, file already exists.";
-                    $uploadOk = 0;
-                  }
-                  // Check file size
-                  if ($_FILES[$inputFileName]["size"][$i] > 5000000) {
-                    echo "Sorry, file ".$_FILES[$inputFileName]["name"][$i]." is too large.";
-                    $uploadOk = 0;
-                  }
-                  // Allow certain file formats
-                  if(!in_array($imageFileType, $permited, true)) {
-                    echo "Sorry, only ".implode(", ",$permited)." files are allowed.";
-                    $uploadOk = 0;
-                  }
-                  // Check if $uploadOk is set to 0 by an error
-                  if ($uploadOk == 0) {
-                    echo "Sorry, file ".$_FILES[$inputFileName]["name"][$i]." was not uploaded.";
-                    $fileNamesResult[] = null;
-                    // if everything is ok, try to upload file
-                  } else {
-                    if (move_uploaded_file($_FILES[$inputFileName]["tmp_name"][$i], $target_file)) {
-                    echo "The file ". htmlspecialchars( basename( $_FILES[$inputFileName]["name"][$i])). " has been uploaded.";
-                    $fileNamesResult[] = $target_file;
-                    } else {
-                    echo "Sorry, there was an error uploading ".$_FILES[$inputFileName]["name"][$i]." file.";
-                    $fileNamesResult[] = null;
-                    }
-                  }
           
-                  }
+          public function handleUpload(string $fileInputName = "myFile", string $target_dir = "./") {
+            $this->abortIfFileToBig();
+            if (isset($_FILES[$fileInputName])) {
+              if (is_string( $_FILES[$fileInputName]['name'] )) {
+                  // Handle string case 
+                  $_FILES[$fileInputName]['name'] = [ $_FILES[$fileInputName]['name'] ];
+                  $_FILES[$fileInputName]["tmp_name"] = [ $_FILES[$fileInputName]["tmp_name"] ];
+                  $_FILES[$fileInputName]["size"] = [ $_FILES[$fileInputName]["size"] ];
+                  $_FILES[$fileInputName]["type"] = [ $_FILES[$fileInputName]["type"] ];
+              }
+            } else {
+                // The 'myFile' key is not set in the POST data.
+                return false;
             }
-            if(count($fileNamesResult)>1) 
-              return $fileNamesResult;
-            else
-              return $fileNamesResult[0];
+            $results_array = [];
+            $numberOfFiles = count( $_FILES[$fileInputName]['name']  );
+            for($i=0; $i<$numberOfFiles;$i++) {
+              if( $this->isSizeOk($_FILES[$fileInputName]["size"][$i]) && $this->isTypeAllowed($_FILES[$fileInputName]["type"][$i]))  {
+                $target_file = $target_dir . basename( $_FILES[$fileInputName]["name"][$i] );
+                $results_array[] = [
+                  move_uploaded_file($_FILES[$fileInputName]["tmp_name"][$i], $target_file),
+                  "path"=>$target_file,
+                  "type"=>$_FILES[$fileInputName]["type"][$i],
+                  "size"=>$_FILES[$fileInputName]["size"][$i]
+                ];
+              }
+            }
+            
+            return $results_array;
           }
+          public function isSizeOk($fileSize) {
+            return $fileSize <= $this->maxFileSize;
+          }
+          public function isTypeAllowed($fileType) {
+            return $this->isAllowedMime($fileType);
+          }
+          public function isAllowedMime($mime) {
+            return in_array( explode("/",$mime)[1] , $this->allowed);
+          }
+          
 
         private function abortIfFileToBig() {
             // Get the maximum allowed POST size in bytes
@@ -94,10 +81,6 @@ namespace marianojwl\SimpleUploadHandler {
         }
         
 
-        // Continue processing the request if content length is within limits
-        // Your normal request handling logic here
-
-        // Helper function to parse size strings like "2M" or "512K" into bytes
         private function parse_size($size) {
             $unit = strtoupper(substr($size, -1));
             $number = (int)substr($size, 0, -1);
