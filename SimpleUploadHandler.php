@@ -10,6 +10,7 @@ namespace marianojwl\SimpleUploadHandler {
             $this->allowed = $allowed;
             $this->maxFileSize = $maxFileSize;
         }
+        
         public function getAcceptAttributeValue() {
           return "." . implode(", .",$this->allowed);
         }
