@@ -25,7 +25,7 @@ namespace marianojwl\SimpleUploadHandler {
           }
           
           
-          public function handleUpload(string $fileInputName = "myFile", string $target_dir = "./") {
+          public function handleUpload(string $fileInputName = "myFile", string $target_dir = "./", string $newName = "") {
             $this->abortIfFileToBig();
             if (isset($_FILES[$fileInputName])) {
               if (is_string( $_FILES[$fileInputName]['name'] )) {
@@ -43,7 +43,10 @@ namespace marianojwl\SimpleUploadHandler {
             $numberOfFiles = count( $_FILES[$fileInputName]['name']  );
             for($i=0; $i<$numberOfFiles;$i++) {
               if( $this->isSizeOk($_FILES[$fileInputName]["size"][$i]) && $this->isTypeAllowed($_FILES[$fileInputName]["type"][$i]))  {
-                $target_file = $target_dir . basename( $_FILES[$fileInputName]["name"][$i] );
+                if($newName == "")
+                  $target_file = $target_dir . basename( $_FILES[$fileInputName]["name"][$i] );
+                else
+                  $target_file = $target_dir . $newName . "_" . $i . "." . explode("/",$_FILES[$fileInputName]["type"][$i])[1];
                 $results_array[] = [
                   move_uploaded_file($_FILES[$fileInputName]["tmp_name"][$i], $target_file),
                   "path"=>$target_file,
